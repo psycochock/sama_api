@@ -1,3 +1,6 @@
+import hmac
+import os
+
 from flask import Flask, jsonify, request
 
 try:
@@ -5,10 +8,31 @@ try:
 except ImportError:
     from src.backend import *
 
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def _configured_token():
+    token = os.environ.get("API_TOKEN", "").strip()
+    if token:
+        return token
+    try:
+        with open(os.path.join(_ROOT, "api_token"), encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
 class Yui:
 
     app = Flask(__name__)
     app.json.ensure_ascii = False
+
+    @app.before_request
+    def _require_token():
+        token = _configured_token()
+        if not token:
+            return jsonify({"error": "API_TOKEN non configuré"}), 503
+        provided = request.headers.get("Authorization", "")
+        if not hmac.compare_digest(provided, f"Bearer {token}"):
+            return jsonify({"error": "Token manquant ou invalide"}), 401
 
     @app.route('/', methods=["GET"])
     def home():
